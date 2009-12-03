@@ -10,7 +10,10 @@ TIMECARD_AT = '/html/body/form/table/tr[1]/td[1]/table[1]/tbody/tr'
 #TOTAL_AT = '/html/body/form/table/tr[1]/td[1]'
 
 class Kronos
+  # Kronos V 6.0
+  # TODO parse version number of Kronos and assert that this works
   #TODO add asserts to prove that the page is the right page
+  #TODO cleanup attr_accessors
 
   def initialize(server)
     @agent = WWW::Mechanize.new
@@ -18,8 +21,8 @@ class Kronos
     @reply = nil
   end
 
-  def parsedomain(url)
-    #TODO given an arbitrary url to a kronos application, use that domain rather than... static method
+  def self.parsedomain(url)
+    #TODO given an arbitrary url to a kronos application, parse the application path
     # For example, either of the following should work
     # https://kronprod.byu.edu/wfc/applications/wtk/html/ess/logon.jsp
     # https://kronprod.byu.edu/wfc/applications/suitenav/navigation.do?ESS=true
@@ -35,7 +38,16 @@ class Kronos
         :password => token,
         :ESS => 'true',
       }
-    # TODO return boolean
+    @authenticated = !@reply.links.find {|l| l.text =~ /Log Off/}.nil?
+  end
+
+  def authenticated
+    @authenticated
+  end
+
+  def log_off
+    #TODO log off
+    false
   end
 
   def timestamp(job = nil)
@@ -50,7 +62,7 @@ class Kronos
   end
 
   def punch_in(job = nil)
-    timestamp job unless not punched_out
+    timestamp job unless punched_in
     # TODO return boolean
   end
 
@@ -60,7 +72,7 @@ class Kronos
   end
 
   def punch_out
-    timestamp unless not punched_in
+    timestamp unless punched_out
     # TODO return boolean
   end
 
@@ -76,15 +88,15 @@ class Kronos
 
   def timecard(preset = nil)
     #TODO beware of special cases
-    @agent.get "https://#{@server}/wfc/applications/mss/managerlaunch.do?ESS=true"
-    timecard = navigation.links.find {|l| l.text =~ /My Timecard/}.click
+    navigation = @agent.get "https://#{@server}/wfc/applications/mss/managerlaunch.do?ESS=true"
+    timecard_html = navigation.links.find {|l| l.text =~ /My Timecard/}.click
     # TODO use presets and time ranges
     # TODO parse the year
     @punches = []
-    timecard.search(TIMECARD_AT).each do |row|
+    timecard_html.search(TIMECARD_AT).each do |row|
       punch = {
         :date => row.search('td[3]').inner_text.gsub!(/[\302\240]*/, '').strip,
-        :job => row.search('td[5]').inner_text.gsub!(/[\302\240]*/, '').gsub!(/\//, '').strip,
+        :job => row.search('td[5]').inner_text.gsub!(/[\302\240]*/, '').gsub!(/\//, ''),
         :in => row.search('td[4]').inner_text.gsub!(/[\302\240]*/, '').strip,
         :out => row.search('td[6]').inner_text.gsub!(/[\302\240]*/, '').strip,
         :shift => row.search('td[7]').inner_text.gsub!(/[\302\240]*/, '').strip,
@@ -93,11 +105,12 @@ class Kronos
       # TODO combine overnight shifts
       if not punch[:in].empty?
         punch[:in] = DateTime.strptime(punch[:date] + ' ' + punch[:in], '%a %m/%d %I:%M%p')
+        @punched_in = punch[:out].empty?
         if not punch[:out].empty?
           punch[:out] = DateTime.strptime(punch[:date] + ' ' + punch[:out], '%a %m/%d %I:%M%p') 
         end
-        @punched_in = punch[:out].empty?
       end
+      punch[:date] = Date.strptime(punch[:date], '%a %m/%d')
       @punches << punch
     end
 
