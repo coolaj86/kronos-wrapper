@@ -2,6 +2,12 @@
 require 'rubygems'
 require 'mechanize'
 
+#TIMECARD_AT = '/html/body/form/table/tr[1]'
+TIMECARD_AT = '/html/body/form/table/tr[1]/td[1]/table[1]/tbody/tr'
+#NAME_AT = '/html/body/form/table/tr[1]/td[2]'
+#RANGE_AT = '/html/body/form/table/tr[1]/td[2]'
+#TOTAL_AT = '/html/body/form/table/tr[1]/td[1]'
+
 class Kronos
 
   def initialize(server)
@@ -52,13 +58,35 @@ class Kronos
   end
 
   def timecard(preset = nil)
-    navigation = @agent.get "https://#{@server}/wfc/applications/mss/managerlaunch.do?ESS=true" #iframe only
+    #TODO beware of special cases
+    @agent.get "https://#{@server}/wfc/applications/mss/managerlaunch.do?ESS=true"
     timecard = navigation.links.find {|l| l.text =~ /My Timecard/}.click
-    #reply = @agent.get "https://#{server}/wfc/applications/mss/navigation.do?ESS=true" #iframe only
-    []
+    @punches = []
+    timecard.search(TIMECARD_AT).each do |row|
+      punch = {
+        :date => row.search('td[3]').inner_text.gsub!(/[\302\240]*/, '').strip,
+        :job => row.search('td[5]').inner_text.gsub!(/[\302\240]*/, '').strip,
+        :in => row.search('td[4]').inner_text.gsub!(/[\302\240]*/, '').strip,
+        :out => row.search('td[6]').inner_text.gsub!(/[\302\240]*/, '').strip,
+        :shift => row.search('td[7]').inner_text.gsub!(/[\302\240]*/, '').strip,
+        :daily_total => row.search('td[8]').inner_text.gsub!(/[\302\240]*/, '').strip,
+      }
+      if (not punch[:in].empty?) && (punch[:out].empty?)
+        @punched_in = true;
+      end
+      @punches << punch
+    end
+    pp @punches
+    @punches
   end
 
-  def raw_output
-    @reply
+  def punches
+    @punches
+  end
+
+  def punched_in
+    #TODO look at today & yesterday's punches
+    timecard unless @punches
+    @punched_in
   end
 end
