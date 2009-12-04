@@ -8,9 +8,7 @@ class TC_MyTest < Test::Unit::TestCase
   # def teardown
   # end
 
-  def test_fail
-    require 'rubygems'
-    require 'mechanize'
+  def test_all
     puts "\nTest everything except 'timestamp', 'punch_in', and 'transfer')"
 
     puts "Server: "

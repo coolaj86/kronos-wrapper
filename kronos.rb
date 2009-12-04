@@ -12,8 +12,8 @@ TIMECARD_AT = '/html/body/form/table/tr[1]/td[1]/table[1]/tbody/tr'
 class Kronos
   # Kronos V 6.0
   # TODO parse version number of Kronos and assert that this works
-  #TODO add asserts to prove that the page is the right page
-  #TODO cleanup attr_accessors
+  # TODO add asserts to prove that the page is the right page
+  # TODO cleanup attr_accessors
 
   def initialize(server)
     @agent = WWW::Mechanize.new
@@ -58,40 +58,38 @@ class Kronos
       {
         :transfer => job,
       }
-    # TODO return boolean
+    timecard
   end
 
   def punch_in(job = nil)
     timestamp job unless punched_in
-    # TODO return boolean
-  end
-
-  def transfer(job)
-    timestamp job
-    # TODO return boolean
   end
 
   def punch_out
     timestamp unless punched_out
-    # TODO return boolean
   end
 
-  def jobs
-    #TODO parse jobs
-    []
+  def transfer(job)
+    # This allows transferring to the same job
+    # is that good, bad? I dunno
+    timecard unless (!job || !(timestamp job))
   end
 
-  def presets
-    # TODO parse presets
-    []
+  def punched_in
+    #TODO look at today & yesterday's punches rather than all
+    timecard unless @punches
+    @punched_in
+  end
+
+  def punched_out
+    !punched_in
   end
 
   def timecard(preset = nil)
-    #TODO beware of special cases
+    #TODO beware of special cases - what are they?
     navigation = @agent.get "https://#{@server}/wfc/applications/mss/managerlaunch.do?ESS=true"
     timecard_html = navigation.links.find {|l| l.text =~ /My Timecard/}.click
     # TODO use presets and time ranges
-    # TODO parse the year
     @punches = []
     timecard_html.search(TIMECARD_AT).each do |row|
       punch = {
@@ -102,7 +100,7 @@ class Kronos
         :shift => row.search('td[7]').inner_text.gsub!(/[\302\240]*/, '').strip,
         :daily_total => row.search('td[8]').inner_text.gsub!(/[\302\240]*/, '').strip,
       }
-      # TODO combine overnight shifts
+      # TODO combine overnight shifts ?
       if not punch[:in].empty?
         punch[:in] = DateTime.strptime(punch[:date] + ' ' + punch[:in], '%a %m/%d %I:%M%p')
         @punched_in = punch[:out].empty?
@@ -113,7 +111,6 @@ class Kronos
       punch[:date] = Date.strptime(punch[:date], '%a %m/%d')
       @punches << punch
     end
-
     @punches
   end
 
@@ -121,13 +118,13 @@ class Kronos
     @punches
   end
 
-  def punched_in
-    #TODO look at today & yesterday's punches
-    timecard unless @punches
-    @punched_in
+  def jobs
+    #TODO parse jobs
+    []
   end
 
-  def punched_out
-    not punched_in
+  def presets
+    # TODO parse presets
+    []
   end
 end
