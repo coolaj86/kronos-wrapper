@@ -3,11 +3,11 @@ require 'rubygems'
 require 'mechanize'
 require 'date'
 
-#TIMECARD_AT = '/html/body/form/table/tr[1]'
 TIMECARD_AT = '/html/body/form/table/tr[1]/td[1]/table[1]/tbody/tr'
-#NAME_AT = '/html/body/form/table/tr[1]/td[2]'
-#RANGE_AT = '/html/body/form/table/tr[1]/td[2]'
-#TOTAL_AT = '/html/body/form/table/tr[1]/td[1]'
+NAME_AT = '/html/body/form/table/tr[1]/td[2]'
+#PRESETS_AT = '/html/body/form/table/tr[1]/td[2]/table/tr[3]/td/select/optgroup/option'
+#PERSON_ID_LIST = '/html/body/form/table/tr[1]/td[2]/table/tr[1]'
+#PERSON_NAME_AND_ID = '/html/body/form/table/tr[1]/td[2]/table/tr[2]'
 
 class Kronos
   # Kronos V 6.0
@@ -16,7 +16,7 @@ class Kronos
   # TODO cleanup attr_accessors
 
   def initialize(server)
-    @agent = WWW::Mechanize.new
+    kronprod = WWW::Mechanize.new
     @server = server
     @reply = nil
   end
@@ -30,9 +30,14 @@ class Kronos
     server = ''
   end
 
+  def kronprod
+    @kronprod = WWW::Mechanize.new unless @kronprod
+    @kronprod
+  end
+
   def authenticate(user, token)
-    @agent.get "https://#{@server}/wfc/applications/wpk/html/kronos-logonbody.jsp?ESS=true"
-    @reply = @agent.post "https://#{@server}/wfc/portal",
+    kronprod.get "https://#{@server}/wfc/applications/wpk/html/kronos-logonbody.jsp?ESS=true"
+    @reply = kronprod.post "https://#{@server}/wfc/portal",
       {
         :username => user,
         :password => token,
@@ -51,10 +56,11 @@ class Kronos
   end
 
   def timestamp(job = nil)
+    @timecard = nil
     # TODO is there a reason for the trailing slashes?
     job = "////#{job}/" unless (job.nil? or job.index('////'))
-    @agent.get "https://#{@server}/wfc/applications/wtk/html/ess/timestamp.jsp"
-    @reply = @agent.post "https://#{@server}/wfc/applications/wtk/html/ess/timestamp-record.jsp",
+    kronprod.get "https://#{@server}/wfc/applications/wtk/html/ess/timestamp.jsp"
+    @reply = kronprod.post "https://#{@server}/wfc/applications/wtk/html/ess/timestamp-record.jsp",
       {
         :transfer => job,
       }
@@ -85,13 +91,29 @@ class Kronos
     !punched_in
   end
 
-  def timecard(preset = nil)
+  # TODO use presets and time ranges
+  def timecard(preset = nil, begin_date = nil, end_date = nil)
+    return @timecard if @timecard
+    @punches = nil
     #TODO beware of special cases - what are they?
-    navigation = @agent.get "https://#{@server}/wfc/applications/mss/managerlaunch.do?ESS=true"
-    timecard_html = navigation.links.find {|l| l.text =~ /My Timecard/}.click
-    # TODO use presets and time ranges
+    #navigation = kronprod.get "https://#{@server}/wfc/applications/mss/managerlaunch.do?ESS=true"
+    #timecard_html = navigation.links.find {|l| l.text =~ /My Timecard/}.click
+    @timecard_html = kronprod.post "https://#{@server}/wfc/applications/mss/esstimecard.do?ESS=true",
+      {
+        :timeframeId => preset,
+        :beginTimeframeDate => begin_date,
+        :endTimeframeDate => end_date,
+        #:beginningDate => '',
+        #:endDate => '',
+      }
+    @timecard_html
+  end
+
+  def punches
+    return @punches if @punches
+
     @punches = []
-    timecard_html.search(TIMECARD_AT).each do |row|
+    timecard.search(TIMECARD_AT).each do |row|
       punch = {
         :date => row.search('td[3]').inner_text.gsub!(/[\302\240]*/, '').strip,
         :job => row.search('td[5]').inner_text.gsub!(/[\302\240]*/, '').gsub!(/\//, ''),
@@ -105,16 +127,12 @@ class Kronos
         punch[:in] = DateTime.strptime(punch[:date] + ' ' + punch[:in], '%a %m/%d %I:%M%p')
         @punched_in = punch[:out].empty?
         if not punch[:out].empty?
-          punch[:out] = DateTime.strptime(punch[:date] + ' ' + punch[:out], '%a %m/%d %I:%M%p') 
+          punch[:out] = DateTime.strptime(punch[:date] + ' ' + punch[:out], '%a %m/%d %I:%M%p')
         end
       end
       punch[:date] = Date.strptime(punch[:date], '%a %m/%d')
       @punches << punch
     end
-    @punches
-  end
-
-  def punches
     @punches
   end
 
@@ -124,7 +142,12 @@ class Kronos
   end
 
   def presets
-    # TODO parse presets
-    []
+    #We could hard code this, or we can parse it
+    #pp timecard.search(PRESETS_AT).inner_html
+    options = {}
+    timecard.forms.first.fields[8].options.each do |option|
+      options[option.value] = option.text
+    end
+    options
   end
 end
