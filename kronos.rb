@@ -18,7 +18,6 @@ class Kronos
   def initialize(server)
     kronprod = WWW::Mechanize.new
     @server = server
-    @reply = nil
   end
 
   def self.parsedomain(url)
@@ -27,7 +26,7 @@ class Kronos
     # https://kronprod.byu.edu/wfc/applications/wtk/html/ess/logon.jsp
     # https://kronprod.byu.edu/wfc/applications/suitenav/navigation.do?ESS=true
     # server = kronprod.byu.edu
-    server = ''
+    false
   end
 
   def kronprod
@@ -55,18 +54,6 @@ class Kronos
     false
   end
 
-  def timestamp(job = nil)
-    @timecard = nil
-    # TODO is there a reason for the trailing slashes?
-    job = "////#{job}/" unless (job.nil? or job.index('////'))
-    kronprod.get "https://#{@server}/wfc/applications/wtk/html/ess/timestamp.jsp"
-    @reply = kronprod.post "https://#{@server}/wfc/applications/wtk/html/ess/timestamp-record.jsp",
-      {
-        :transfer => job,
-      }
-    timecard
-  end
-
   def punch_in(job = nil)
     timestamp job unless punched_in
   end
@@ -78,12 +65,12 @@ class Kronos
   def transfer(job)
     # This allows transferring to the same job
     # is that good, bad? I dunno
-    timecard unless (!job || !(timestamp job))
+    job && (timestamp job)
   end
 
   def punched_in
     #TODO look at today & yesterday's punches rather than all
-    timecard unless @punches
+    punches # determines @punched_in
     @punched_in
   end
 
@@ -91,29 +78,11 @@ class Kronos
     !punched_in
   end
 
-  # TODO use presets and time ranges
-  def timecard(preset = nil, begin_date = nil, end_date = nil)
-    return @timecard if @timecard
-    @punches = nil
-    #TODO beware of special cases - what are they?
-    #navigation = kronprod.get "https://#{@server}/wfc/applications/mss/managerlaunch.do?ESS=true"
-    #timecard_html = navigation.links.find {|l| l.text =~ /My Timecard/}.click
-    @timecard_html = kronprod.post "https://#{@server}/wfc/applications/mss/esstimecard.do?ESS=true",
-      {
-        :timeframeId => preset,
-        :beginTimeframeDate => begin_date,
-        :endTimeframeDate => end_date,
-        #:beginningDate => '',
-        #:endDate => '',
-      }
-    @timecard_html
-  end
-
   def punches
     return @punches if @punches
 
-    @punches = []
     timecard.search(TIMECARD_AT).each do |row|
+      @punches = [] unless @punches # chicken / egg problem with timecard
       punch = {
         :date => row.search('td[3]').inner_text.gsub!(/[\302\240]*/, '').strip,
         :job => row.search('td[5]').inner_text.gsub!(/[\302\240]*/, '').gsub!(/\//, ''),
@@ -150,4 +119,36 @@ class Kronos
     end
     options
   end
+  
+  private
+    def timestamp(job = nil)
+      @timecard = nil # old timecard is now invalid
+
+      # TODO is there a reason for the trailing slashes?
+      job = "////#{job}/" unless (job.nil? or job.index('////'))
+      kronprod.get "https://#{@server}/wfc/applications/wtk/html/ess/timestamp.jsp"
+      @reply = kronprod.post "https://#{@server}/wfc/applications/wtk/html/ess/timestamp-record.jsp",
+        {
+          :transfer => job,
+        }
+    end
+
+    # TODO use presets and time ranges
+    def timecard(preset = nil, begin_date = nil, end_date = nil)
+      return @timecard if @timecard
+      @punches = nil # punches are now invalid
+
+      #TODO beware of special cases - what are they?
+      #navigation = kronprod.get "https://#{@server}/wfc/applications/mss/managerlaunch.do?ESS=true"
+      #timecard_html = navigation.links.find {|l| l.text =~ /My Timecard/}.click
+      @timecard = kronprod.post "https://#{@server}/wfc/applications/mss/esstimecard.do?ESS=true",
+        {
+          :timeframeId => preset,
+          :beginTimeframeDate => begin_date,
+          :endTimeframeDate => end_date,
+          #:beginningDate => '',
+          #:endDate => '',
+        }
+      @timecard
+    end
 end

@@ -33,7 +33,7 @@ class TC_MyTest < Test::Unit::TestCase
     assert !kronos.authenticated
     assert kronos.authenticate user, token
     assert kronos.authenticated
-    assert kronos.timecard
+    assert kronos.punches
     if kronos.punched_in
       assert kronos.punched_in
       assert !kronos.punched_out
