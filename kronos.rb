@@ -16,7 +16,7 @@ class Kronos
   # TODO cleanup attr_accessors
 
   def initialize(server)
-    kronprod = WWW::Mechanize.new
+    kronprod = Mechanize::Mechanize.new
     @server = server
   end
 
@@ -30,7 +30,7 @@ class Kronos
   end
 
   def kronprod
-    @kronprod = WWW::Mechanize.new unless @kronprod
+    @kronprod = Mechanize::Mechanize.new unless @kronprod
     @kronprod
   end
 
@@ -84,12 +84,12 @@ class Kronos
     timecard.search(TIMECARD_AT).each do |row|
       @punches = [] unless @punches # chicken / egg problem with timecard
       punch = {
-        :date => row.search('td[3]').inner_text.gsub!(/[\302\240]*/, '').strip,
-        :job => row.search('td[5]').inner_text.gsub!(/[\302\240]*/, '').gsub!(/\//, ''),
-        :in => row.search('td[4]').inner_text.gsub!(/[\302\240]*/, '').strip,
-        :out => row.search('td[6]').inner_text.gsub!(/[\302\240]*/, '').strip,
-        :shift => row.search('td[7]').inner_text.gsub!(/[\302\240]*/, '').strip,
-        :daily_total => row.search('td[8]').inner_text.gsub!(/[\302\240]*/, '').strip,
+        :date => row.search('td[3]').inner_text.strip,
+        :job => row.search('td[5]').inner_text.gsub!(/\//, ''),
+        :in => row.search('td[4]').inner_text.strip,
+        :out => row.search('td[6]').inner_text.strip,
+        :shift => row.search('td[7]').inner_text.strip,
+        :daily_total => row.search('td[8]').inner_text.strip,
       }
       # TODO combine overnight shifts ?
       if not punch[:in].empty?
